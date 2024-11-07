@@ -44,7 +44,7 @@ class Concatenate():
         
         else : raise ValueError()
     
-    def __call__(self, audio : np.ndarray, queries : List[TimeStamp], sampling_rate : int, fade_time : float, clean : bool, max_backtrack : float):
+    def __call__(self, audio : np.ndarray, queries : List[TimeStamp], sampling_rate : int, fade_time : float, clean : bool, max_backtrack : float = None):
         response = []
         start=0
         stop=1
@@ -54,15 +54,15 @@ class Concatenate():
         #memory = np.concatenate(memory_chunks)
         onsets, backtrack = detect_onsets(audio.astype(np.float32),sampling_rate,True) #compute onsets and backtrack once over whole memeory
         #to samples
-        onsets = int(onsets*sampling_rate)
-        backtrack = int(backtrack*sampling_rate)
+        onsets = (onsets*sampling_rate).astype(int)
+        backtrack = (backtrack*sampling_rate).astype(int)
         
         fade_in_t,fade_out_t = None,None #fade in and out timestamps (in samples)
         x_l, x_r = 0,0 #left and right shift of crossing point
         
         if max_backtrack==None : max_backtrack = fade_time/2 #si plus grand que fade_t/2 il faudrait recalculer la fenetre 
         
-        while stop < len(queries):
+        while start < len(queries):
             
             #check if silence
             t0 = queries[start]
@@ -111,6 +111,13 @@ class Concatenate():
                 
     #TODO : PAS BESOIN DE GENERER CONTINOUS ICI MEME ON PEUT JUSTE UTILISER LES TIMESTAMPS MAIS FAUT GERER SILENCE        
     def _generate_continous(self, audio : np.ndarray, queries : List[TimeStamp], start : int, stop: int) -> Tuple[List[List], int]:
+        
+        #border case where we end with an isolated segment
+        if stop == len(queries):
+            t0 = queries[start]
+            is_silence = t0.index == -1
+            continous = [audio[t0.times[0]:t0.times[1]].tolist()] if not is_silence else [[0]*t0.duration]
+            return continous, stop
         
         t0,t1 = queries[start], queries[stop] #timestamps of queries "start" and "stop"
         
@@ -205,47 +212,8 @@ class Concatenate():
             #fade in segment
             to_fade_in = self.__extract_fade_segment(audio, fade_in_t, r, -x_l) # -x_l cuz defined the other way
             
-            # t0_in = fade_in_t - (r - x_l)
-            # pad_l = 0 #zeros to pad left
-            # if t0_in<0:
-            #     pad_l = abs(t0_in)
-            #     t0_in = 0
-                
-            # t1_in = fade_in_t + (r - x_l)
-            # pad_r = 0 #zeros to pad right
-            # if t1_in>=len(audio):
-            #     pad_r = t1_in-len(audio)
-            #     t1_in = len(audio)-1
-            
-            # to_fade_in = audio[t0_in:t1_in]
-            
-            # if pad_l>0:
-            #     to_fade_in = np.concatenate([np.zeros(pad_l),to_fade_in])
-            # if pad_r>0:
-            #     to_fade_in = np.concatenate([to_fade_in,np.zeros(pad_r)])
-            
-            
-                
             #fade out segment
             to_fade_out = self.__extract_fade_segment(audio, fade_out_t, r, x_r)
-            
-            # t0_out = fade_out_t - (r + x_r)
-            # pad_l = 0 #zeros to pad left
-            # if t0_out<0:
-            #     pad_l = abs(t0_out)
-            #     t0_out = 0
-                
-            # t1_out = fade_in_t + (r + x_r)
-            # pad_r = 0
-            # if t1_out>=len(audio):
-            #     pad_r = t1_out-len(audio)
-            #     t1_out = len(audio)-1
-            
-            # to_fade_out = audio[t0_out:t1_out]
-            # if pad_l>0:
-            #     to_fade_out = np.concatenate([np.zeros(pad_l),to_fade_out])
-            # if pad_r>0:
-            #     to_fade_out = np.concatenate([to_fade_out,np.zeros(pad_r)])
                 
             #-----generate crossfade windows-----#
             fade_time_in = len(to_fade_in)/sampling_rate
@@ -303,10 +271,17 @@ class Concatenate():
             #------concatenate all together------#
             T = len(crossfade)
             
+            print("response :-T//2",len(response)/sampling_rate,len(response[:-T//2])/sampling_rate)
+            print("continous",len(audio[t.times[0]+T//2:t.times[1]])/sampling_rate)
+            print("crossfade",len(crossfade)/sampling_rate)
+            
             response = np.concatenate([response[:-T//2],crossfade,audio[t.times[0]+T//2:t.times[1]]])
+            
+            print("response", len(response)/sampling_rate)
         
         #new segment is silence
         elif fade_in_t == None and fade_out_t != None:
+            print('on ne devrait pas rentrer ici !')
             #fade out segment
             to_fade_out = self.__extract_fade_segment(audio, fade_out_t, r, x_r)
             fade_time_out = len(to_fade_out)/sampling_rate
@@ -318,8 +293,9 @@ class Concatenate():
             
             response = np.concatenate([response[:-T//2],crossfade,[0]*(t.duration-T//2)])
         
-        #previous segment is silence
+        #previous segment is silence or first segment
         elif fade_in_t != None and fade_out_t == None :
+            print("First segment or previous was silent")
             to_fade_in = self.__extract_fade_segment(audio, fade_in_t, r, -x_l)
             fade_time_in = len(to_fade_in)/sampling_rate
             fade_in = self._generate_crossfade_window(fade_time_in,sampling_rate,'in')
@@ -328,7 +304,14 @@ class Concatenate():
             crossfade = to_fade_in
             T = len(crossfade)
             
-            response = np.concatenate([response[:-T//2],crossfade,audio[t.times[0]+T//2:t.times[1]]])
+            if len(response)>0:
+                response = np.concatenate([response[:-T//2],crossfade,audio[t.times[0]+T//2:t.times[1]]])
+            
+            else :
+                response = np.concatenate([crossfade,audio[t.times[0]+T:t.times[1]]])
+            
+            print(len(response)/sampling_rate)
+            
             
         else :
             raise RuntimeError("There should not be a case where fade_in and fade_out are None")

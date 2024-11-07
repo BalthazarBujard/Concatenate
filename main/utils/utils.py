@@ -3,8 +3,9 @@ from librosa.onset import onset_backtrack
 from essentia.standard import Windowing,FFT,CartesianToPolar,FrameGenerator,Onsets,OnsetDetection
 import essentia 
 import numpy as np
+from typing import *
 
-def detect_onsets(track, sampling_rate, with_backtrack):
+def detect_onsets(track, sampling_rate, with_backtrack) -> Tuple[np.ndarray,np.ndarray]:
     if sampling_rate<44100 : raise ValueError("The sampling rate for essentia onset detect is otpimized for 44.1kHz. For lower rates use librosa.")
     
     od_complex = OnsetDetection(method='complex')
