@@ -301,11 +301,39 @@ class Concatenate():
             crossfade = to_fade_in+to_fade_out
             
             #------concatenate all together------#
-            T = len(to_fade_in)
+            T = len(crossfade)
+            
+            response = np.concatenate([response[:-T//2],crossfade,audio[t.times[0]+T//2:t.times[1]]])
+        
+        #new segment is silence
+        elif fade_in_t == None and fade_out_t != None:
+            #fade out segment
+            to_fade_out = self.__extract_fade_segment(audio, fade_out_t, r, x_r)
+            fade_time_out = len(to_fade_out)/sampling_rate
+            fade_out = self._generate_crossfade_window(fade_time_out, sampling_rate, 'out')
+            to_fade_out*=fade_out
+            
+            crossfade = to_fade_out
+            T = len(crossfade)
+            
+            response = np.concatenate([response[:-T//2],crossfade,[0]*(t.duration-T//2)])
+        
+        #previous segment is silence
+        elif fade_in_t != None and fade_out_t == None :
+            to_fade_in = self.__extract_fade_segment(audio, fade_in_t, r, -x_l)
+            fade_time_in = len(to_fade_in)/sampling_rate
+            fade_in = self._generate_crossfade_window(fade_time_in,sampling_rate,'in')
+            to_fade_in *= fade_in
+            
+            crossfade = to_fade_in
+            T = len(crossfade)
             
             response = np.concatenate([response[:-T//2],crossfade,audio[t.times[0]+T//2:t.times[1]]])
             
-            return response
+        else :
+            raise RuntimeError("There should not be a case where fade_in and fade_out are None")
+            
+        return response
                  
             
             
