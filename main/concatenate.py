@@ -2,7 +2,7 @@
 
 from typing import Any, List, Tuple
 import numpy as np
-from utils.utils import detect_onsets, find_elems_in_range
+from .utils.utils import detect_onsets, find_elems_in_range
 
 def cross_fade_windows(fade_time,sampling_rate):
     f=1/(4*fade_time) #frequency of cos and sine windows (sin=1 and cos=0 at tmax=fade_time)
