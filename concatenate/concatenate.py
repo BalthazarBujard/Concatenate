@@ -46,7 +46,7 @@ class TimeStamp():
     def duration(self):
         return self.times[1]-self.times[0]
 
-class Concatenate():
+class Concatenator():
     def __init__(self,verbose:bool=False):
         self.verbose=verbose
     
@@ -90,7 +90,6 @@ class Concatenate():
         max_backtrack*=sampling_rate #to samples
         
         while start < len(markers):
-            print([m.new_times for m in markers])
             output, stop, t, new_t = self._concatenate_one_step(audio, markers, output,
                                                                 fade_time,
                                                                 sampling_rate,start,stop,
@@ -153,7 +152,11 @@ class Concatenate():
         
         #update markers' new_times
         for i in range(start,stop):
-            t0_ = markers[i-1].new_times[1]+1 if i>0 else 0
+            try:
+                t0_ = markers[i-1].new_times[1]+1
+            except TypeError as e:
+                t0_ = 0
+            
             markers[i].new_times = [t0_,t0_+markers[i].duration]
         
         #crossfade between output and new segment (continous)
