@@ -1,0 +1,11 @@
+setup.py
+concatenate/__init__.py
+concatenate/concatenate.py
+concatenate/segment.py
+concatenate.egg-info/PKG-INFO
+concatenate.egg-info/SOURCES.txt
+concatenate.egg-info/dependency_links.txt
+concatenate.egg-info/requires.txt
+concatenate.egg-info/top_level.txt
+concatenate/utils/__init__.py
+concatenate/utils/utils.py

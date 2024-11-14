@@ -1,7 +1,7 @@
 from librosa import time_to_frames,frames_to_time
 from librosa.onset import onset_backtrack,onset_detect
-from essentia.standard import Windowing,FFT,CartesianToPolar,FrameGenerator,Onsets,OnsetDetection
-import essentia 
+# from essentia.standard import Windowing,FFT,CartesianToPolar,FrameGenerator,Onsets,OnsetDetection
+# import essentia 
 import numpy as np
 from typing import *
 
