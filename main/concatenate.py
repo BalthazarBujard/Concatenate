@@ -18,16 +18,29 @@ import matplotlib.pyplot as plt
 class TimeStamp():
     def __init__(self,times:Tuple[int,int]):#,index:int):
         # times should be represented in samples and index as slice index
-        self.__times = times
+        self.__times = times #original timestamp before reassignment
         self.__new_times = None
         #self.__index = index
     
     @property
     def times(self):
         return self.__times
+    
+    @times.setter
+    def times(self,times:Tuple[int,int]):
+        self.__times=times
+    
     # @property 
     # def index(self):
     #     return self.__index
+    
+    @property
+    def new_times(self):
+        return self.__new_times
+    
+    @new_times.setter 
+    def new_times(self,new_times:Tuple[int,int]):
+        self.__new_times = new_times
     
     @property
     def duration(self):
@@ -77,7 +90,6 @@ class Concatenate():
         max_backtrack*=sampling_rate #to samples
         
         while start < len(markers):
-            
             output, stop, t, new_t = self._concatenate_one_step(audio, markers, output,
                                                                 fade_time,
                                                                 sampling_rate,start,stop,
@@ -88,6 +100,7 @@ class Concatenate():
             delta_r = t.times[1]-new_t.times[1]
             fade_out_cp_time = new_t.times[1] #if not is_silence else None #if silence then no fade out
             #print("xr",delta_r)
+            
             
             #update counters
             start = stop
@@ -109,20 +122,23 @@ class Concatenate():
         #compute next continous segment. stop is the index of the non-consecutive index
         if stop<len(markers):
             stop = self._generate_continous(markers, start, stop)
-        
-        #continious_lens.append(len(continous)) #for statistics
-        #continous = np.concatenate(continous) #flatten
+            
+        t1 = markers[stop-1]
         
         #compute fade_in_time 
         fade_in_cp_time = t0.times[0] 
         
-        t = TimeStamp((t0.times[0],markers[stop-1].times[1]))#,new_index) #timestamp of continous segment to concatenate
+        t = TimeStamp((t0.times[0],t1.times[1]))#,new_index) #timestamp of continous segment to concatenate
         new_t = t
         delta_l=0
         #clean continous segment of early/late attacks
         if clean :#and not is_silence:
             print("Finding best markers")
             new_t = self._find_best(t,onsets,backtrack,max_backtrack) 
+            
+            #update markers original time. only update borders of continous segment
+            markers[start].times = [new_t.times[0],markers[start].times[1]] 
+            markers[stop-1].times = [markers[stop-1].times[0],new_t.times[1]]
             
             #continous = audio[new_t.times[0]:new_t.times[1]]
             
@@ -134,11 +150,19 @@ class Concatenate():
             #update fade_in_time
             fade_in_cp_time = new_t.times[0]
         
+        #update markers' new_times
+        d=0
+        for i in range(start,stop):
+            t0_ = markers[start-1].new_times[1]+d+1 if start>0 else d
+            markers[i].new_times = [t0_,t0_+markers[i].duration]
+            d+=markers[i].duration+1
+        
         #crossfade between output and new segment (continous)
         output = self._process_crossfade(output, audio, new_t, fade_in_cp_time, fade_out_cp_time, fade_time, sampling_rate, delta_l, delta_r)
         
         return output, stop, t, new_t
-        
+    
+    #find longest consecutive segments in markers   
     def _generate_continous(self, markers : List[TimeStamp], start : int, stop: int) -> int:
         
         t0,t1 = markers[start], markers[stop] #timestamps of markers "start" and "stop"
@@ -231,9 +255,9 @@ class Concatenate():
                 t1=len(audio)-1
                 
             append = np.concatenate([audio[t0:t1],np.zeros(pad_r)])
-            print("output before append:",len(output)/sampling_rate)
+            #print("output before append:",len(output)/sampling_rate)
             output = np.concatenate([output,append])
-            print("output after append:",len(output)/sampling_rate)
+            #print("output after append:",len(output)/sampling_rate)
             
             t0 = fade_in_cp_time - delta
             t1 = fade_in_cp_time
@@ -243,9 +267,9 @@ class Concatenate():
                 t0 = 0
             prepend = np.concatenate([np.zeros(pad_l),audio[t0:t1]])
             new_segment = audio[t.times[0]:t.times[1]]
-            print("new segment before prepend:",len(new_segment)/sampling_rate)
+            #print("new segment before prepend:",len(new_segment)/sampling_rate)
             new_segment = np.concatenate([prepend,new_segment])
-            print("new segment after prepend:",len(new_segment)/sampling_rate)
+            #print("new segment after prepend:",len(new_segment)/sampling_rate)
             
             assert len(append)==len(prepend), print(len(append),len(prepend)) #security and debugging
             
@@ -264,7 +288,7 @@ class Concatenate():
             #pad output and new segment before summing
             pad_output = len(new_segment)-2*delta
             pad_new_segment = len(output)-2*delta
-            print("pad_output:",pad_output/sampling_rate)
+            #print("pad_output:",pad_output/sampling_rate)
             
             output = np.concatenate([output,np.zeros(pad_output)])
             new_segment = np.concatenate([np.zeros(pad_new_segment),new_segment])
@@ -287,7 +311,7 @@ class Concatenate():
             
             output = new_segment+output
             
-            print("output after crossfade:",len(output)/sampling_rate)
+            #print("output after crossfade:",len(output)/sampling_rate)
             
         
         #first segment
@@ -295,7 +319,7 @@ class Concatenate():
         #DONC IL FAUT FAIRE GAFFE SI IL Y A DECALAGE DU POINT DE MONTAGE
         #IL FAUT PAS RALLONGER OU RACCOURCIR LE SEGMENT A CAUSE DE CA -> SINON DESYNCHRO
         elif fade_out_cp_time == None :
-            print("First segment")
+            #print("First segment")
             new_segment = audio[t.times[0]:t.times[1]]
             sin = self._generate_crossfade_window(fade_time,sampling_rate,'in')
             new_segment[:len(sin)] *= sin
