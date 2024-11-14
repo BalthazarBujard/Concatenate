@@ -90,6 +90,7 @@ class Concatenate():
         max_backtrack*=sampling_rate #to samples
         
         while start < len(markers):
+            print([m.new_times for m in markers])
             output, stop, t, new_t = self._concatenate_one_step(audio, markers, output,
                                                                 fade_time,
                                                                 sampling_rate,start,stop,
@@ -151,11 +152,9 @@ class Concatenate():
             fade_in_cp_time = new_t.times[0]
         
         #update markers' new_times
-        d=0
         for i in range(start,stop):
-            t0_ = markers[start-1].new_times[1]+d+1 if start>0 else d
+            t0_ = markers[i-1].new_times[1]+1 if i>0 else 0
             markers[i].new_times = [t0_,t0_+markers[i].duration]
-            d+=markers[i].duration+1
         
         #crossfade between output and new segment (continous)
         output = self._process_crossfade(output, audio, new_t, fade_in_cp_time, fade_out_cp_time, fade_time, sampling_rate, delta_l, delta_r)
