@@ -120,8 +120,8 @@ class Concatenator():
         t0 = markers[start]
             
         #compute next continous segment. stop is the index of the non-consecutive index
-        # if stop<len(markers):
-        #     stop = self._generate_continous(markers, start, stop)
+        if stop<len(markers):
+            stop = self._generate_continous(markers, start, stop)
             
         t1 = markers[stop-1]
         
