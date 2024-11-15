@@ -54,9 +54,9 @@ class Concatenator():
         f=1/(4*fade_time) #frequency of cos and sine windows (sin=1 and cos=0 at tmax=fade_time)
         t=np.linspace(0,fade_time,int(fade_time*sampling_rate))
         if in_out == "in":
-            return np.sin(2*np.pi*f*t)
+            return np.sin(2*np.pi*f*t)**2
         elif in_out == "out":
-            return np.cos(2*np.pi*f*t)
+            return np.cos(2*np.pi*f*t)**2
         
         else : raise ValueError()
     
@@ -120,8 +120,8 @@ class Concatenator():
         t0 = markers[start]
             
         #compute next continous segment. stop is the index of the non-consecutive index
-        if stop<len(markers):
-            stop = self._generate_continous(markers, start, stop)
+        # if stop<len(markers):
+        #     stop = self._generate_continous(markers, start, stop)
             
         t1 = markers[stop-1]
         
@@ -287,6 +287,16 @@ class Concatenator():
             output[-T_samples:] *= cos #apply fade out to end of output
             new_segment[:T_samples] *= sin #apply fade in to beginning of new_segment
             
+            if self.verbose:
+                plt.plot(cos)
+                plt.plot(output[-T_samples:]+0.1,label='fade out')
+                plt.plot(sin)
+                plt.plot(new_segment[:T_samples]-0.1,label='fade in')
+                plt.plot(output[-T_samples:]+new_segment[:T_samples],label='output')
+                plt.vlines(T_samples//2,ymin=0,ymax=1,label=f"cp @ {T_samples/2}", colors='r',linestyles='--')
+                plt.legend(fontsize=9)
+                plt.show()
+            
             #pad output and new segment before summing
             pad_output = len(new_segment)-2*delta
             pad_new_segment = len(output)-2*delta
@@ -296,20 +306,20 @@ class Concatenator():
             new_segment = np.concatenate([np.zeros(pad_new_segment),new_segment])
             
             #plt.subplot(1,2,1)
-            if self.verbose:
-                plt.plot(output+0.5)
-                relative_fade_out_t = len(output)-pad_output-T_samples//2
-                plt.vlines(relative_fade_out_t,ymin=-1,ymax=1,colors='r',linestyles='--',label='f_out point')
-                x=range(relative_fade_out_t-T_samples//2,relative_fade_out_t+T_samples//2)
-                plt.plot(x,cos,label='cosine')
-                plt.plot(new_segment-0.5)
-                relative_fade_in_t = pad_new_segment+T_samples//2
-                plt.vlines(relative_fade_in_t,ymin=-1,ymax=1,colors='k',linestyles='--',label='f_in point')
-                x=range(relative_fade_in_t-T_samples//2,relative_fade_in_t+T_samples//2)
-                plt.plot(x,sin-1,label='sinus')
-                plt.legend()
-                plt.xlim(left=len(output)-40000)
-                plt.show()
+            # if self.verbose:
+            #     plt.plot(output+0.5)
+            #     relative_fade_out_t = len(output)-pad_output-T_samples//2
+            #     plt.vlines(relative_fade_out_t,ymin=-1,ymax=1,colors='r',linestyles='--',label='f_out point')
+            #     x=range(relative_fade_out_t-T_samples//2,relative_fade_out_t+T_samples//2)
+            #     plt.plot(x,cos,label='cosine')
+            #     plt.plot(new_segment-0.5)
+            #     relative_fade_in_t = pad_new_segment+T_samples//2
+            #     plt.vlines(relative_fade_in_t,ymin=-1,ymax=1,colors='k',linestyles='--',label='f_in point')
+            #     x=range(relative_fade_in_t-T_samples//2,relative_fade_in_t+T_samples//2)
+            #     plt.plot(x,sin-1,label='sinus')
+            #     plt.legend()
+            #     plt.xlim(left=len(output)-40000)
+            #     plt.show()
             
             output = new_segment+output
             
