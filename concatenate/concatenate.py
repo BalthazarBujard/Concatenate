@@ -53,8 +53,10 @@ class Concatenator():
     def _generate_crossfade_window(self, fade_time : float, sampling_rate : int, in_out : str):
         f=1/(4*fade_time) #frequency of cos and sine windows (sin=1 and cos=0 at tmax=fade_time)
         t=np.linspace(0,fade_time,int(fade_time*sampling_rate))
+        
         if in_out == "in":
             return np.sin(2*np.pi*f*t)**2
+
         elif in_out == "out":
             return np.cos(2*np.pi*f*t)**2
         
