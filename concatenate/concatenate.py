@@ -142,12 +142,9 @@ class Concatenator():
             markers[start].times = [new_t.times[0],markers[start].times[1]] 
             markers[stop-1].times = [markers[stop-1].times[0],new_t.times[1]]
             
-            #continous = audio[new_t.times[0]:new_t.times[1]]
-            
-            #delta_l, delta_r = t.times[0]-new_t.times[0], t.times[1]-new_t.times[1] #left and right shift after cleaning onsets
             #right shift computed after crossfade because we want the right shift of the last continous segment
             delta_l = t.times[0]-new_t.times[0]
-            print('xl',delta_l)
+            #print('xl',delta_l)
             
             #update fade_in_time
             fade_in_cp_time = new_t.times[0]
@@ -163,6 +160,8 @@ class Concatenator():
         
         #crossfade between output and new segment (continous)
         output = self._process_crossfade(output, audio, new_t, fade_in_cp_time, fade_out_cp_time, fade_time, sampling_rate, delta_l, delta_r)
+        
+        #print("output:",len(output)/sampling_rate)
         
         return output, stop, t, new_t
     
@@ -181,6 +180,8 @@ class Concatenator():
         
         return stop # stop is the index of the first NON-consecutive slice
     
+    #THIS FUNCTION IS PROBABLY SPECIFIC TO DICY3.
+    #IF YOU DONT WANT EARLY OR LATE ATTACKS WITH YOUR CONCATENATION, PROPERLY SEGMENT YOUR AUDIO BEFOREHAND
     def _find_best(self, t: TimeStamp, 
                onsets : np.ndarray[int], backtrack : np.ndarray[int], 
                max_backtrack : int) -> TimeStamp:
@@ -213,7 +214,7 @@ class Concatenator():
                 #delta_l = t0-back # >0 : left shift, <0 : right shift
                 t0 = back
         
-        new_t = TimeStamp((t0,t1),t.index)
+        new_t = TimeStamp((t0,t1))
         
         return new_t
     
@@ -249,7 +250,8 @@ class Concatenator():
         
         if fade_out_cp_time != None:
             
-            delta = r+max(delta_r,-delta_l) #utiliser au lieu de r±delta_l/r
+            d_max = max(delta_r,-delta_l)
+            delta = r+d_max #utiliser au lieu de r±delta_l/r
             
             t0 = fade_out_cp_time
             t1 = t0+delta
@@ -306,22 +308,6 @@ class Concatenator():
             
             output = np.concatenate([output,np.zeros(pad_output)])
             new_segment = np.concatenate([np.zeros(pad_new_segment),new_segment])
-            
-            #plt.subplot(1,2,1)
-            # if self.verbose:
-            #     plt.plot(output+0.5)
-            #     relative_fade_out_t = len(output)-pad_output-T_samples//2
-            #     plt.vlines(relative_fade_out_t,ymin=-1,ymax=1,colors='r',linestyles='--',label='f_out point')
-            #     x=range(relative_fade_out_t-T_samples//2,relative_fade_out_t+T_samples//2)
-            #     plt.plot(x,cos,label='cosine')
-            #     plt.plot(new_segment-0.5)
-            #     relative_fade_in_t = pad_new_segment+T_samples//2
-            #     plt.vlines(relative_fade_in_t,ymin=-1,ymax=1,colors='k',linestyles='--',label='f_in point')
-            #     x=range(relative_fade_in_t-T_samples//2,relative_fade_in_t+T_samples//2)
-            #     plt.plot(x,sin-1,label='sinus')
-            #     plt.legend()
-            #     plt.xlim(left=len(output)-40000)
-            #     plt.show()
             
             output = new_segment+output
             
