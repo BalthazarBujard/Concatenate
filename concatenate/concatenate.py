@@ -1,46 +1,49 @@
 # file for concatenate class
 
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional, Union
 import numpy as np
 from .utils.utils import detect_onsets, find_elems_in_range
 from librosa.onset import onset_detect
 import matplotlib.pyplot as plt
 
-# def cross_fade_windows(fade_time,sampling_rate):
-#     f=1/(4*fade_time) #frequency of cos and sine windows (sin=1 and cos=0 at tmax=fade_time)
-#     t=np.linspace(0,fade_time,int(fade_time*sampling_rate))
-#     fade_in = np.sin(2*np.pi*f*t)
-#     fade_out = np.cos(2*np.pi*f*t)
-    
-#     return fade_in,fade_out
 
-#TODO : Rajouter timestamp avant/apres ?
 class TimeStamp():
-    def __init__(self,times:Tuple[int,int]):#,index:int):
-        # times should be represented in samples and index as slice index
+    def __init__(self,times:Tuple[Union[int,float],Union[int,float]], 
+                 new_times : Optional[Tuple[Union[int,float],Union[int,float]]] = None):
+        
         self.__times = times #original timestamp before reassignment
-        self.__new_times = None
-        #self.__index = index
+        self.__new_times = new_times #timestamp in output
     
     @property
     def times(self):
         return self.__times
     
     @times.setter
-    def times(self,times:Tuple[int,int]):
+    def times(self,times:Tuple[Union[int,float],Union[int,float]]):
         self.__times=times
     
-    # @property 
-    # def index(self):
-    #     return self.__index
     
     @property
     def new_times(self):
         return self.__new_times
     
     @new_times.setter 
-    def new_times(self,new_times:Tuple[int,int]):
+    def new_times(self,new_times:Tuple[Union[int,float],Union[int,float]]):
         self.__new_times = new_times
+    
+    def from_seconds_to_samples(self,sampling_rate):
+        self.times = [int(t*sampling_rate) for t in self.times]
+        try:
+            self.new_times = [int(t*sampling_rate) for t in self.new_times]
+        except TypeError as e: #if new_times is None dont change it
+            pass
+
+    def from_samples_to_seconds(self,sampling_rate):
+        self.times = [t/sampling_rate for t in self.times]
+        try:
+            self.new_times = [t/sampling_rate for t in self.new_times]
+        except TypeError as e: #if new_times is None dont change it
+            pass
     
     @property
     def duration(self):
@@ -245,7 +248,7 @@ class Concatenator():
                    fade_time : float, sampling_rate : int,
                    delta_l : int, delta_r : int):
         
-        #fade_in, fade_out = cross_fade_windows(fade_time, sampling_rate)
+        fade_time = min(fade_time,t.duration)
         r = int((fade_time/2) * sampling_rate) #delta
         
         if fade_out_cp_time != None:
