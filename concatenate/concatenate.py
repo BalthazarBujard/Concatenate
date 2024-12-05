@@ -248,7 +248,10 @@ class Concatenator():
                    fade_time : float, sampling_rate : int,
                    delta_l : int, delta_r : int):
         
-        fade_time = min(fade_time,t.duration)
+        if not t.duration > 0:
+            raise RuntimeError("New chunk to crossfade is empty")
+        
+        fade_time = min(fade_time,t.duration/sampling_rate)
         r = int((fade_time/2) * sampling_rate) #delta
         
         if fade_out_cp_time != None:
