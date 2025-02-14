@@ -252,7 +252,7 @@ class Concatenator():
             raise RuntimeError("New chunk to crossfade is empty")
         
         if fade_time < 0.01 or fade_time > t.duration/sampling_rate:
-            raise ValueError("Fade time should be gretaer than 10ms and shorter than the chunk duration !")
+            raise ValueError(f"Fade time should be gretaer than 10ms and shorter than the chunk duration ({t.duration/sampling_rate:.4f}s) !")
         
         fade_time = max(fade_time,0.01)
         r = int((fade_time/2) * sampling_rate) #delta
