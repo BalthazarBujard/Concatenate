@@ -31,14 +31,14 @@ class TimeStamp():
     def new_times(self,new_times:Tuple[Union[int,float],Union[int,float]]):
         self.__new_times = new_times
     
-    def from_seconds_to_samples(self,sampling_rate):
+    def from_seconds_to_samples(self,sampling_rate : int):
         self.times = [int(t*sampling_rate) for t in self.times]
         try:
             self.new_times = [int(t*sampling_rate) for t in self.new_times]
         except TypeError as e: #if new_times is None dont change it
             pass
 
-    def from_samples_to_seconds(self,sampling_rate):
+    def from_samples_to_seconds(self,sampling_rate : int):
         self.times = [t/sampling_rate for t in self.times]
         try:
             self.new_times = [t/sampling_rate for t in self.new_times]
@@ -66,6 +66,7 @@ class Concatenator():
         else : raise ValueError()
     
     
+    #TODO : add "new_times" argument
     def __call__(self, audio : np.ndarray, markers : List[TimeStamp], 
                  sampling_rate : int, fade_time : float, 
                  clean : bool, max_backtrack : float = None) -> np.ndarray:
@@ -73,12 +74,7 @@ class Concatenator():
         output = []
         start=0
         stop=1
-        #continious_lens=[]
-        #new_index = 0 # index for slice count in output
         
-        #memory = np.concatenate(memory_chunks)
-        #onsets, backtrack = detect_onsets(audio.astype(np.float32),sampling_rate,True) #compute onsets and backtrack once over whole memeory
-        #to samples
         if clean:
             onsets, backtrack = detect_onsets(audio,sampling_rate,True) #compute onsets and backtrack once over whole memeory
             #to samples
@@ -88,31 +84,30 @@ class Concatenator():
         else :
             onsets, backtrack = None, None
         
-        fade_in_cp_time,fade_out_cp_time = None,None #fade in and out crossing points (in samples)
-        delta_l, delta_r = 0,0 #left and right shift of crossing point
+        fade_out_cp_time = None #fade out crossing point (in samples). None means no fade out crossing point (first segment)
+        delta_r = 0 #shift of right crossing point (fade out crossing point)
         
         if max_backtrack==None : max_backtrack = fade_time/2 #si plus grand que fade_t/2 il faudrait recalculer la fenetre 
         max_backtrack*=sampling_rate #to samples
         
         while start < len(markers):
             output, stop, t, new_t = self._concatenate_one_step(audio, markers, output,
-                                                                fade_time,
-                                                                sampling_rate,start,stop,
+                                                                fade_time, sampling_rate, 
+                                                                start, stop,
                                                                 fade_out_cp_time,delta_r,
                                                                 clean, onsets, backtrack, max_backtrack)
             
             #update fade out params
-            delta_r = t.times[1]-new_t.times[1]
-            fade_out_cp_time = new_t.times[1] #if not is_silence else None #if silence then no fade out
+            delta_r = t.times[1]-new_t.times[1] # right crossing point shift = t1 - t1'
+            fade_out_cp_time = new_t.times[1]
             #print("xr",delta_r)
             
             
             #update counters
             start = stop
             stop += 1
-            #new_index += 1
         
-        return output #and other variables ?
+        return output 
     
     #on a besoin de output, stop, t et new_t
     def _concatenate_one_step(self, audio : np.ndarray, markers : List[TimeStamp], output:np.ndarray,
@@ -130,14 +125,16 @@ class Concatenator():
             
         t1 = markers[stop-1]
         
-        #compute fade_in_time 
+        #fade in crossing point is beginning of continous segment (start marker's t0) 
         fade_in_cp_time = t0.times[0] 
         
-        t = TimeStamp((t0.times[0],t1.times[1]))#,new_index) #timestamp of continous segment to concatenate
+        t = TimeStamp((t0.times[0],t1.times[1])) #timestamp of continous segment to concatenate
+        
         new_t = t
         delta_l=0
-        #clean continous segment of early/late attacks
-        if clean :#and not is_silence:
+        
+        #clean continous segment of early/late attacks by shifting crossing points to closest backtrack time
+        if clean :
             print("Finding best markers")
             new_t = self._find_best(t,onsets,backtrack,max_backtrack) 
             
@@ -152,16 +149,7 @@ class Concatenator():
             #update fade_in_time
             fade_in_cp_time = new_t.times[0]
         
-        #update markers' new_times
-        for i in range(start,stop):
-            try:
-                t0_ = markers[i-1].new_times[1]+1
-            except TypeError as e:
-                t0_ = 0
-            
-            markers[i].new_times = [t0_,t0_+markers[i].duration]
-        
-        #crossfade between output and new segment (continous)
+        #crossfade between output and new segment
         output = self._process_crossfade(output, audio, new_t, fade_in_cp_time, fade_out_cp_time, fade_time, sampling_rate, delta_l, delta_r)
         
         #print("output:",len(output)/sampling_rate)
@@ -221,27 +209,62 @@ class Concatenator():
         
         return new_t
     
-    def __extract_fade_segment(self,audio,fade_t,r,x):
-        t0 = fade_t - (r+x)
-        pad_l=0
-        if t0<0:
-            pad_l = abs(t0)
-            t0 = 0
+    # no longer extracting crossfade segements to avoid losing samples
+    # def __extract_fade_segment(self,audio,fade_t,r,x):
+    #     t0 = fade_t - (r+x)
+    #     pad_l=0
+    #     if t0<0:
+    #         pad_l = abs(t0)
+    #         t0 = 0
         
-        t1 = fade_t + (r+x)
-        pad_r = 0
-        if t1>=len(audio):
-            pad_r = t1-len(audio)+1
-            t1 = len(audio)-1
+    #     t1 = fade_t + (r+x)
+    #     pad_r = 0
+    #     if t1>=len(audio):
+    #         pad_r = t1-len(audio)+1
+    #         t1 = len(audio)-1
         
-        to_fade = audio[t0:t1]
-        if pad_l>0:
-            to_fade = np.concatenate([np.zeros(pad_l),to_fade])
-        if pad_r>0:
-            to_fade = np.concatenate([to_fade,np.zeros(pad_r)])
+    #     to_fade = audio[t0:t1]
+    #     if pad_l>0:
+    #         to_fade = np.concatenate([np.zeros(pad_l),to_fade])
+    #     if pad_r>0:
+    #         to_fade = np.concatenate([to_fade,np.zeros(pad_r)])
         
-        return to_fade
+    #     return to_fade
     
+    #method to add extra segments to output and new segment for crossfade
+    def _prepare_segments_for_crossfade(self, audio : np.ndarray, output:np.ndarray, new_segment : np.ndarray, t : TimeStamp, fade_in_cp_time : int, fade_out_cp_time : int, delta : int):
+        #output processing
+        t0_out = fade_out_cp_time
+        t1_out = t0_out+delta
+        pad_r=0
+        if t1_out >= len(audio):
+            pad_r = t1_out-len(audio)+1
+            t1_out = len(audio)-1 #limit to audio duration
+            
+        append = np.concatenate([audio[t0_out:t1_out],np.zeros(pad_r)]) #(right) extra segment for crossfade output 
+        #print("output before append:",len(output)/sampling_rate)
+        output = np.concatenate([output,append])
+        #print("output after append:",len(output)/sampling_rate)
+        
+        #new_segment processing
+        t0_in = fade_in_cp_time - delta
+        t1_in = fade_in_cp_time
+        pad_l=0
+        if t0_in<0:
+            pad_l = abs(t0_in)
+            t0_in = 0 #limit to beginning of audio
+        
+        prepend = np.concatenate([np.zeros(pad_l),audio[t0_in:t1_in]]) #(left) extra segment for crossfade new segment
+        #print("new segment before prepend:",len(new_segment)/sampling_rate)
+        new_segment = np.concatenate([prepend,new_segment])
+        #print("new segment after prepend:",len(new_segment)/sampling_rate)
+        
+        assert len(append)==len(prepend), print(len(append),len(prepend)) #security and debugging
+        
+        #half_length = len(prepend) #duration of half crossfade window
+        
+        return output, new_segment#, half_length #half_length is delta
+            
     
     def _process_crossfade(self, output : np.ndarray, audio : np.ndarray, t : TimeStamp,
                    fade_in_cp_time : int, fade_out_cp_time : int, #crossfade crossing point for fade in and fade out in samples
@@ -257,41 +280,19 @@ class Concatenator():
         fade_time = max(fade_time,0.01)
         r = int((fade_time/2) * sampling_rate) #delta
         
+        #extract new segment to concatenate
+        new_segment = audio[t.times[0]:t.times[1]]
+        
         if fade_out_cp_time != None:
             
             d_max = max(delta_r,-delta_l)
             delta = r+d_max #utiliser au lieu de r±delta_l/r
             
-            t0 = fade_out_cp_time
-            t1 = t0+delta
-            pad_r=0
-            if t1>=len(audio):
-                pad_r=t1-len(audio)+1
-                t1=len(audio)-1
-                
-            append = np.concatenate([audio[t0:t1],np.zeros(pad_r)])
-            #print("output before append:",len(output)/sampling_rate)
-            output = np.concatenate([output,append])
-            #print("output after append:",len(output)/sampling_rate)
-            
-            t0 = fade_in_cp_time - delta
-            t1 = fade_in_cp_time
-            pad_l=0
-            if t0<0:
-                pad_l = abs(t0)
-                t0 = 0
-            prepend = np.concatenate([np.zeros(pad_l),audio[t0:t1]])
-            new_segment = audio[t.times[0]:t.times[1]]
-            #print("new segment before prepend:",len(new_segment)/sampling_rate)
-            new_segment = np.concatenate([prepend,new_segment])
-            #print("new segment after prepend:",len(new_segment)/sampling_rate)
-            
-            assert len(append)==len(prepend), print(len(append),len(prepend)) #security and debugging
-            
-
+            #add extra segment for crossfade to output and new_segment
+            output, new_segment = self._prepare_segments_for_crossfade(audio, output, new_segment, t, fade_in_cp_time, fade_out_cp_time, delta)
             
             # generate and apply windows
-            T_samples = 2*len(prepend)
+            T_samples = 2*delta #half_length
             T = T_samples/sampling_rate #crossfade effective duration
 
             cos = self._generate_crossfade_window(T,sampling_rate,'out')
@@ -311,8 +312,8 @@ class Concatenator():
                 plt.show()
             
             #pad output and new segment before summing
-            pad_output = len(new_segment)-2*delta
-            pad_new_segment = len(output)-2*delta
+            pad_output = len(new_segment)-T_samples #2*delta
+            pad_new_segment = len(output)-T_samples #2*delta
             #print("pad_output:",pad_output/sampling_rate)
             
             output = np.concatenate([output,np.zeros(pad_output)])
@@ -324,12 +325,8 @@ class Concatenator():
             
         
         #first segment
-        #ATTENTION ICI ON FADE_IN SIMPLEMENT LE NOUVEAU SEGMENT 
-        #DONC IL FAUT FAIRE GAFFE SI IL Y A DECALAGE DU POINT DE MONTAGE
-        #IL FAUT PAS RALLONGER OU RACCOURCIR LE SEGMENT A CAUSE DE CA -> SINON DESYNCHRO
         elif fade_out_cp_time == None :
             #print("First segment")
-            new_segment = audio[t.times[0]:t.times[1]]
             sin = self._generate_crossfade_window(fade_time,sampling_rate,'in')
             new_segment[:len(sin)] *= sin
             
