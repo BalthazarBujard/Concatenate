@@ -125,8 +125,12 @@ class Concatenator():
             
         t1 = markers[stop-1]
         
+        first_slice = start==0
+        last_slice = stop>len(markers)-1
+        #print(first_slice,last_slice)
+        
         #fade in crossing point is beginning of continous segment (start marker's t0) 
-        fade_in_cp_time = t0.times[0] 
+        #fade_in_cp_time = t0.times[0] 
         
         t = TimeStamp((t0.times[0],t1.times[1])) #timestamp of continous segment to concatenate
         
@@ -147,10 +151,10 @@ class Concatenator():
             #print('xl',delta_l)
             
             #update fade_in_time
-            fade_in_cp_time = new_t.times[0]
+            #fade_in_cp_time = new_t.times[0]
         
         #crossfade between output and new segment
-        output = self._process_crossfade(output, audio, new_t, fade_in_cp_time, fade_out_cp_time, fade_time, sampling_rate, delta_l, delta_r)
+        output = self._process_crossfade_v2(output, audio, new_t, fade_time, sampling_rate, delta_l, delta_r, first_slice, last_slice)
         
         #print("output:",len(output)/sampling_rate)
         
@@ -163,7 +167,6 @@ class Concatenator():
         
         #compute consecutive segments
         while t1.times[0] == t0.times[1]+1:
-            #continous.append(audio[t1.times[0]:t1.times[1]].tolist())
             t0 = t1
             stop += 1
             if stop == len(markers) : break
@@ -265,6 +268,96 @@ class Concatenator():
         
         return output, new_segment#, half_length #half_length is delta
             
+    def _prepare_segment_for_crossfade(self, audio : np.ndarray, new_segment : np.ndarray, fade_in_cp_time : int, fade_out_cp_time : int, delta : int, first_slice : bool, last_slice : bool):
+        
+        append = []
+        if not last_slice:
+            #fade_out extra segment
+            t0_out = fade_out_cp_time
+            t1_out = t0_out+delta
+            pad_r=0
+            if t1_out >= len(audio):
+                pad_r = t1_out-len(audio)+1
+                t1_out = len(audio)-1 #limit to audio duration
+                
+            append = np.concatenate([audio[t0_out:t1_out],np.zeros(pad_r)]) #(right) extra segment
+        
+        prepend = []
+        if not first_slice:
+            #fade_in extra segment
+            t0_in = fade_in_cp_time - delta
+            t1_in = fade_in_cp_time
+            pad_l=0
+            if t0_in<0:
+                pad_l = abs(t0_in)
+                t0_in = 0 #limit to beginning of audio
+            
+            prepend = np.concatenate([np.zeros(pad_l),audio[t0_in:t1_in]]) #(left) extra segment
+        
+        #assert len(append)==len(prepend), print(len(append),len(prepend)) #security and debugging
+        
+        #print("new segment before prepend:",len(new_segment)/sampling_rate)
+        new_segment = np.concatenate([prepend,new_segment, append])
+        
+        return new_segment
+    
+    def _process_crossfade_v2(self, output : np.ndarray, audio : np.ndarray, t : TimeStamp,
+                   fade_time : float, sampling_rate : int,
+                   delta_l : int, delta_r : int,
+                   first_slice : bool, last_slice : bool):
+        
+        if not t.duration > 0:
+            raise RuntimeError("New chunk to crossfade is empty")
+        
+        if fade_time < 0.01 or fade_time > t.duration/sampling_rate:
+            raise ValueError(f"Fade time should be gretaer than 10ms and shorter than the chunk duration ({t.duration/sampling_rate:.4f}s) !")
+        
+        fade_time = max(fade_time,0.01)
+        r = int((fade_time/2) * sampling_rate) #delta
+        
+        #extract new segment to concatenate
+        new_segment = audio[t.times[0]:t.times[1]]
+        
+        fade_in_cp_time = t.times[0]
+        fade_out_cp_time = t.times[1]
+        
+        # d_max = max(delta_r,-delta_l)
+        # delta = r+d_max #utiliser au lieu de r±delta_l/r
+        
+        #add extra segments for crossfade
+        new_segment = self._prepare_segment_for_crossfade(audio, new_segment, fade_in_cp_time, fade_out_cp_time, r, first_slice, last_slice)
+        #print("new_segment duration",len(new_segment)/sampling_rate)
+        
+        # generate and apply windows
+        T_samples = 2*r #half_length
+        T = T_samples/sampling_rate #crossfade effective duration
+
+        cos = self._generate_crossfade_window(T,sampling_rate,'out')
+        sin = self._generate_crossfade_window(T,sampling_rate,'in')
+        
+        new_segment[:T_samples] *= sin #apply fade in to beginning of new_segment
+        new_segment[-T_samples:] *= cos #apply fade out to end of output
+        
+        if output != []:
+            #pad output and new segment before summing
+            pad_output = len(new_segment)-T_samples #2*delta
+            pad_new_segment = len(output)-T_samples #2*delta
+            #print("pad_output:",pad_output/sampling_rate)
+            
+            output = np.concatenate([output,np.zeros(pad_output)])
+            new_segment = np.concatenate([np.zeros(pad_new_segment),new_segment])
+            
+            output = new_segment+output
+        
+        #first segment
+        else : 
+            output = new_segment
+        
+        #print("output after crossfade:",len(output)/sampling_rate)
+        
+            
+        return output
+        
     
     def _process_crossfade(self, output : np.ndarray, audio : np.ndarray, t : TimeStamp,
                    fade_in_cp_time : int, fade_out_cp_time : int, #crossfade crossing point for fade in and fade out in samples
