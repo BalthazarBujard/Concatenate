@@ -323,7 +323,7 @@ class Concatenator():
         t0 = max(0,t.new_times[0] - delta) #position of segemnt in output
         t1 = min(len(output),t.new_times[1] + delta)
         
-        print(t0, t1, len(output))
+        #print(t0, t1, len(output))
         
         #pad new segment
         pad_l = t0 
@@ -361,7 +361,7 @@ class Concatenator():
         
         #add extra segments for crossfade
         new_segment = self._prepare_segment_for_crossfade(audio, new_segment, fade_in_cp_time, fade_out_cp_time, r, first_slice, last_slice)
-        print("new_segment duration",len(new_segment)/sampling_rate)
+        #print("new_segment duration",len(new_segment)/sampling_rate)
         
         # generate and apply windows
         T_samples = 2*r #half_length
