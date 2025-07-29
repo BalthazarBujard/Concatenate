@@ -1,8 +1,12 @@
-Metadata-Version: 2.1
-Name: concatenate
+Metadata-Version: 2.4
+Name: concatenate_BB
 Version: 0.1
 Summary: A custom library for concatenating audio files
 Author: Balthazar Bujard
 Author-email: balthazar.bujard@ircam.fr
 Requires-Dist: numpy
 Requires-Dist: librosa
+Dynamic: author
+Dynamic: author-email
+Dynamic: requires-dist
+Dynamic: summary
